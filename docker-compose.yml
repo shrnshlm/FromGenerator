@@ -1,0 +1,97 @@
+version: '3.8'
+
+services:
+  api-gateway:
+    build: ./ApiGateway
+    ports:
+      - "7000:80"
+    depends_on:
+      - text-analysis-service
+      - form-generation-service
+      - form-submission-service
+      - notification-service
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Development
+      - ASPNETCORE_URLS=http://+:80
+    networks:
+      - app-network
+
+  text-analysis-service:
+    build: ./TextAnalysisService
+    ports:
+      - "7001:80"
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Development
+      - ASPNETCORE_URLS=http://+:80
+      - CLAUDE_API_KEY=${CLAUDE_API_KEY}
+    networks:
+      - app-network
+
+  form-generation-service:
+    build: ./FormGenerationService
+    ports:
+      - "7002:80"
+    depends_on:
+      - text-analysis-service
+      - redis
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Development
+      - ASPNETCORE_URLS=http://+:80
+      - REDIS_CONNECTION_STRING=redis:6379
+    networks:
+      - app-network
+
+  form-submission-service:
+    build: ./FormSubmissionService
+    ports:
+      - "7003:80"
+    depends_on:
+      - form-generation-service
+      - notification-service
+      - postgres
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Development
+      - ASPNETCORE_URLS=http://+:80
+      - CONNECTION_STRING=Host=postgres;Database=FormSubmissions;Username=postgres;Password=password
+    networks:
+      - app-network
+
+  notification-service:
+    build: ./NotificationService
+    ports:
+      - "7004:80"
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Development
+      - ASPNETCORE_URLS=http://+:80
+      - SMTP_SERVER=${SMTP_SERVER}
+      - SMTP_USERNAME=${SMTP_USERNAME}
+      - SMTP_PASSWORD=${SMTP_PASSWORD}
+    networks:
+      - app-network
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    networks:
+      - app-network
+
+  postgres:
+    image: postgres:15
+    ports:
+      - "5432:5432"
+    environment:
+      - POSTGRES_DB=FormSubmissions
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=password
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - app-network
+
+volumes:
+  postgres_data:
+
+networks:
+  app-network:
+    driver: bridge
