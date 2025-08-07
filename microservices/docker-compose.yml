@@ -2,7 +2,7 @@ version: '3.8'
 
 services:
   api-gateway:
-    build: ./ApiGateway
+    build: ./Gateway
     ports:
       - "7000:80"
     depends_on:
@@ -17,7 +17,7 @@ services:
       - app-network
 
   text-analysis-service:
-    build: ./TextAnalysisService
+    build: ./TextAnalysis
     ports:
       - "7001:80"
     environment:
@@ -28,7 +28,7 @@ services:
       - app-network
 
   form-generation-service:
-    build: ./FormGenerationService
+    build: ./FormGeneration
     ports:
       - "7002:80"
     depends_on:
@@ -42,7 +42,7 @@ services:
       - app-network
 
   form-submission-service:
-    build: ./FormSubmissionService
+    build: ./FormSubmission
     ports:
       - "7003:80"
     depends_on:
@@ -57,7 +57,7 @@ services:
       - app-network
 
   notification-service:
-    build: ./NotificationService
+    build: ./Notification
     ports:
       - "7004:80"
     environment:
