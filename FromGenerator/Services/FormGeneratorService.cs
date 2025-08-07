@@ -1,4 +1,6 @@
 ﻿using FromGenerator.Models;
+using System.Text.Json;
+using System.Text.Json.Serialization;
 using FromGenerator.Services;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Options;
@@ -11,10 +13,12 @@ namespace FromGenerator.Services
     public class FormGeneratorService : IFormGeneratorService
     {
         private readonly ILogger<FormGeneratorService> _logger;
+        private readonly IClaudeService _claudeService;
 
-        public FormGeneratorService(ILogger<FormGeneratorService> logger)
+        public FormGeneratorService(ILogger<FormGeneratorService> logger, IClaudeService claudeService)
         {
             _logger = logger;
+            _claudeService = claudeService;
         }
 
         public async Task<GeneratedForm> GenerateFormFromTextAsync(string text, string userId = null)
@@ -23,9 +27,52 @@ namespace FromGenerator.Services
             {
                 _logger.LogInformation("Generating form from text: {Text}", text);
 
-                // Simple keyword-based intent detection
-                var intent = DetectIntent(text);
-                var entities = ExtractEntities(text);
+                // Use AI-powered intent detection and entity extraction
+                _logger.LogInformation("Using AI-powered analysis for intent detection for text: {Text}", text);
+                
+                string aiAnalysis;
+                try
+                {
+                    aiAnalysis = await _claudeService.AnalyzeTextForFormGenerationAsync(text);
+                    _logger.LogInformation("Claude API returned response length: {Length}", aiAnalysis?.Length ?? 0);
+                    
+                    if (string.IsNullOrWhiteSpace(aiAnalysis))
+                    {
+                        _logger.LogError("AI analysis returned empty or null response");
+                        throw new InvalidOperationException("AI analysis returned empty response");
+                    }
+                    
+                    _logger.LogDebug("Claude API raw response: {Response}", aiAnalysis);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, "Failed to get AI analysis from Claude API");
+                    throw new InvalidOperationException("Claude API call failed", ex);
+                }
+
+                AIAnalysisResponse analysisResult;
+                try
+                {
+                    analysisResult = System.Text.Json.JsonSerializer.Deserialize<AIAnalysisResponse>(aiAnalysis);
+                    _logger.LogInformation("Successfully deserialized AI response. Intent: {Intent}", analysisResult?.Intent);
+                }
+                catch (JsonException jsonEx)
+                {
+                    _logger.LogError(jsonEx, "Failed to deserialize AI response: {Response}", aiAnalysis);
+                    throw new InvalidOperationException($"Failed to parse AI response: {jsonEx.Message}");
+                }
+                
+                if (analysisResult == null || string.IsNullOrWhiteSpace(analysisResult.Intent))
+                {
+                    _logger.LogError("AI analysis result is null or has no intent");
+                    throw new InvalidOperationException("AI analysis failed to detect intent");
+                }
+
+                var intent = analysisResult.Intent;
+                var entities = ExtractEntitiesFromAIResponse(analysisResult);
+                
+                _logger.LogInformation("AI detected intent: {Intent} with confidence: {Confidence}", 
+                    intent, analysisResult.Confidence);
 
                 var form = new GeneratedForm
                 {
@@ -35,7 +82,7 @@ namespace FromGenerator.Services
                 };
 
                 // Generate form based on detected intent
-                switch (intent.ToLower())
+                switch (intent?.ToLower() ?? "generic")
                 {
                     case "bookflight":
                         form = GenerateFlightBookingForm(form, entities, text);
@@ -72,73 +119,6 @@ namespace FromGenerator.Services
             }
         }
 
-        private string DetectIntent(string text)
-        {
-            var lowerText = text.ToLower();
-
-            if (lowerText.Contains("flight") || lowerText.Contains("fly") ||
-                (lowerText.Contains("book") && (lowerText.Contains("ticket") || lowerText.Contains("plane"))))
-                return "BookFlight";
-
-            if (lowerText.Contains("hotel") || lowerText.Contains("room") ||
-                lowerText.Contains("accommodation") || lowerText.Contains("reservation"))
-                return "HotelReservation";
-
-            if (lowerText.Contains("contact") || lowerText.Contains("question") ||
-                lowerText.Contains("help") || lowerText.Contains("support"))
-                return "ContactUs";
-
-            if (lowerText.Contains("register") || lowerText.Contains("signup") ||
-                lowerText.Contains("sign up") || lowerText.Contains("account"))
-                return "Registration";
-
-            if (lowerText.Contains("feedback") || lowerText.Contains("review") ||
-                lowerText.Contains("rating") || lowerText.Contains("complain"))
-                return "Feedback";
-
-            if (lowerText.Contains("appointment") || lowerText.Contains("schedule") ||
-                lowerText.Contains("meeting") || lowerText.Contains("booking"))
-                return "Appointment";
-
-            return "Generic";
-        }
-
-        private Dictionary<string, string> ExtractEntities(string text)
-        {
-            var entities = new Dictionary<string, string>();
-            var lowerText = text.ToLower();
-
-            // Extract common cities
-            var cities = new[] { "new york", "paris", "london", "tokyo", "dubai", "singapore",
-                           "sydney", "berlin", "madrid", "rome", "los angeles", "chicago" };
-
-            foreach (var city in cities)
-            {
-                if (lowerText.Contains(city))
-                {
-                    entities["destination"] = city;
-                    entities["city"] = city;
-                    break;
-                }
-            }
-
-            // Extract dates
-            if (lowerText.Contains("today"))
-                entities["date"] = DateTime.Today.ToString("yyyy-MM-dd");
-            else if (lowerText.Contains("tomorrow"))
-                entities["date"] = DateTime.Today.AddDays(1).ToString("yyyy-MM-dd");
-            else if (lowerText.Contains("next week"))
-                entities["date"] = DateTime.Today.AddDays(7).ToString("yyyy-MM-dd");
-
-            // Extract numbers
-            var numbers = System.Text.RegularExpressions.Regex.Matches(text, @"\b\d+\b");
-            if (numbers.Count > 0)
-            {
-                entities["number"] = numbers[0].Value;
-            }
-
-            return entities;
-        }
 
         private GeneratedForm GenerateFlightBookingForm(GeneratedForm form, Dictionary<string, string> entities, string originalText)
         {
@@ -549,5 +529,48 @@ namespace FromGenerator.Services
                 return false;
             }
         }
+
+        private Dictionary<string, string> ExtractEntitiesFromAIResponse(AIAnalysisResponse analysisResult)
+        {
+            var entities = new Dictionary<string, string>();
+            
+            if (analysisResult.Entities != null)
+            {
+                foreach (var entity in analysisResult.Entities)
+                {
+                    entities[entity.Type] = entity.Value;
+                }
+            }
+            
+            return entities;
+        }
+    }
+
+    // Helper classes for AI analysis response
+    public class AIAnalysisResponse
+    {
+        [JsonPropertyName("intent")]
+        public string Intent { get; set; }
+
+        [JsonPropertyName("confidence")]
+        public double Confidence { get; set; }
+
+        [JsonPropertyName("entities")]
+        public List<AIEntity> Entities { get; set; } = new List<AIEntity>();
+
+        [JsonPropertyName("reasoning")]
+        public string Reasoning { get; set; }
+    }
+
+    public class AIEntity
+    {
+        [JsonPropertyName("type")]
+        public string Type { get; set; }
+
+        [JsonPropertyName("value")]
+        public string Value { get; set; }
+
+        [JsonPropertyName("confidence")]
+        public double Confidence { get; set; }
     }
 }

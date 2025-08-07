@@ -11,6 +11,23 @@ namespace FromGenerator.Controllers
     [Route("api/[controller]")]
     public class FormController : ControllerBase
     {
+        [HttpOptions("generate")]
+        public IActionResult OptionsGenerate()
+        {
+            Response.Headers.Add("Access-Control-Allow-Origin", "http://formgenerator-frontend-2025.s3-website-us-west-2.amazonaws.com");
+            Response.Headers.Add("Access-Control-Allow-Methods", "POST, OPTIONS");
+            Response.Headers.Add("Access-Control-Allow-Headers", "Content-Type, Authorization");
+            return Ok();
+        }
+
+        [HttpOptions("submit")]
+        public IActionResult OptionsSubmit()
+        {
+            Response.Headers.Add("Access-Control-Allow-Origin", "http://formgenerator-frontend-2025.s3-website-us-west-2.amazonaws.com");
+            Response.Headers.Add("Access-Control-Allow-Methods", "POST, OPTIONS");
+            Response.Headers.Add("Access-Control-Allow-Headers", "Content-Type, Authorization");
+            return Ok();
+        }
         private readonly IFormGeneratorService _formGenerator;
 
         public FormController(IFormGeneratorService formGenerator)
@@ -23,6 +40,11 @@ namespace FromGenerator.Controllers
         {
             try
             {
+                // Add CORS headers
+                Response.Headers.Add("Access-Control-Allow-Origin", "http://formgenerator-frontend-2025.s3-website-us-west-2.amazonaws.com");
+                Response.Headers.Add("Access-Control-Allow-Methods", "POST, OPTIONS");
+                Response.Headers.Add("Access-Control-Allow-Headers", "Content-Type, Authorization");
+
                 if (request == null || string.IsNullOrWhiteSpace(request.Text))
                 {
                     return BadRequest(new ErrorResponse
@@ -50,6 +72,11 @@ namespace FromGenerator.Controllers
         {
             try
             {
+                // Add CORS headers
+                Response.Headers.Add("Access-Control-Allow-Origin", "http://formgenerator-frontend-2025.s3-website-us-west-2.amazonaws.com");
+                Response.Headers.Add("Access-Control-Allow-Methods", "POST, OPTIONS");
+                Response.Headers.Add("Access-Control-Allow-Headers", "Content-Type, Authorization");
+
                 if (request == null || string.IsNullOrWhiteSpace(request.FormId) ||
                     request.FieldValues == null || !request.FieldValues.Any())
                 {

@@ -1,5 +1,6 @@
 using FromGenerator.Models;
 using FromGenerator.Services;
+using FromGenerator.Configuration;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -10,19 +11,22 @@ builder.Services.AddSwaggerGen();
 
 //builder.Services.AddScoped<ICLUService, CLUService>();
 
+// Configure Claude settings
+builder.Services.Configure<ClaudeSettings>(builder.Configuration.GetSection("Claude"));
 builder.Services.AddHttpClient<ClaudeService>();
-builder.Services.Configure<ClaudeConfig>(builder.Configuration.GetSection("Claude"));
+builder.Services.AddScoped<IClaudeService, ClaudeService>();
 builder.Services.AddScoped<IFormGeneratorService, FormGeneratorService>();
 builder.Services.Configure<EmailConfig>(builder.Configuration.GetSection("EmailConfig"));
 builder.Services.AddScoped<EmailService>();
-
-builder.Services.AddScoped<IFormGeneratorService, FormGeneratorService>();
 // Add CORS
 builder.Services.AddCors(options =>
 {
     options.AddPolicy("AllowFrontend", policy =>
     {
-        policy.WithOrigins("http://localhost:5173")
+        policy.WithOrigins(
+                "http://localhost:5173",
+                "http://formgenerator-frontend-2025.s3-website-us-west-2.amazonaws.com"
+              )
               .AllowAnyHeader()
               .AllowAnyMethod();
     });
